@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import QRCode from 'qrcode'
 import { BarChart3, ExternalLink, GripVertical, Link2, Menu, MoreHorizontal, Palette, Play, Plus, QrCode, Settings, Share2, Sparkles, Trash2, Upload, X } from 'lucide-react'
+import { supabase } from './lib/supabase'
 import './styles.css'
 import './functional.css'
 import './public.css'
@@ -25,7 +26,10 @@ function App() {
   const [published, setPublished] = useState(() => localStorage.getItem('biogen-published') === 'true')
   const [draggedId, setDraggedId] = useState(null)
   const [stats, setStats] = useState(() => getStored('biogen-stats', { views: 12482, clicks: 3106, byLink: {} }))
-  const isPublicPage = window.location.pathname.toLowerCase() === '/kimhuyen' || window.location.pathname.toLowerCase() === `/${profile.handle.toLowerCase()}`
+  const requestedHandle = window.location.pathname.split('/').filter(Boolean)[0]?.toLowerCase()
+  const isPublicPage = Boolean(requestedHandle)
+  const [remoteLoaded, setRemoteLoaded] = useState(false)
+  const publicUrl = `${window.location.origin}/${profile.handle}`
 
   useEffect(() => localStorage.setItem('biogen-profile', JSON.stringify(profile)), [profile])
   useEffect(() => localStorage.setItem('biogen-links', JSON.stringify(links)), [links])
@@ -34,9 +38,35 @@ function App() {
   useEffect(() => localStorage.setItem('biogen-stats', JSON.stringify(stats)), [stats])
   useEffect(() => { if (!sessionStorage.getItem('biogen-view-recorded')) { sessionStorage.setItem('biogen-view-recorded', 'true'); setStats((old) => ({ ...old, views: old.views + 1 })) } }, [])
   useEffect(() => {
+    if (isPublicPage) return
     setProfile((old) => old.handle === 'hoaimy' ? { ...old, name: 'Kim Huyen', handle: 'kimhuyen' } : old)
     setLinks((old) => old.map((item) => ({ ...item, url: item.url.replaceAll('hoaimy', 'kimhuyen') })))
+  }, [isPublicPage])
+
+  useEffect(() => {
+    if (!supabase) { setRemoteLoaded(true); return undefined }
+    const handle = isPublicPage ? requestedHandle : profile.handle
+    let cancelled = false
+    supabase.from('bio_pages').select('profile, links, theme, published, stats').eq('handle', handle).maybeSingle()
+      .then(({ data, error }) => {
+        if (error) console.error('Could not load bio page', error)
+        if (!cancelled && data) {
+          setProfile(data.profile)
+          setLinks(data.links || [])
+          setTheme(data.theme || 'aurora')
+          setPublished(Boolean(data.published))
+          setStats(data.stats || { views: 0, clicks: 0, byLink: {} })
+        }
+        if (!cancelled) setRemoteLoaded(true)
+      })
+    return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (!supabase || !remoteLoaded || !profile.handle) return
+    supabase.from('bio_pages').upsert({ handle: profile.handle, profile, links, theme, published, stats, updated_at: new Date().toISOString() })
+      .then(({ error }) => { if (error) console.error('Could not save bio page', error) })
+  }, [profile, links, theme, published, stats, remoteLoaded])
 
   if (isPublicPage) return <PublicPage profile={profile} links={links} theme={theme} onClick={(link) => setStats((old) => ({ ...old, clicks: old.clicks + 1, byLink: { ...old.byLink, [link.id]: (old.byLink[link.id] || 0) + 1 } }))} />
 
@@ -55,13 +85,13 @@ function App() {
   }
   const uploadAvatar = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => updateProfile('avatar', reader.result); reader.readAsDataURL(file) }
   const recordClick = (link) => setStats((old) => ({ ...old, clicks: old.clicks + 1, byLink: { ...old.byLink, [link.id]: (old.byLink[link.id] || 0) + 1 } }))
-  const publish = () => { setPublished(true); navigator.clipboard?.writeText(`https://biogen.vn/${profile.handle}`) }
+  const publish = () => { setPublished(true); navigator.clipboard?.writeText(publicUrl) }
 
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-mark">✦</div><span>biogen</span></div><div className="workspace-label">WORKSPACE</div><div className="profile-mini"><Avatar profile={profile} small/><div><strong>{profile.name}</strong><small>@{profile.handle}</small></div><MoreHorizontal size={17}/></div><nav className="main-nav"><button className={activeTab === 'editor' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('editor')}><Link2 size={18}/> Bio page</button><button className={activeTab === 'analytics' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('analytics')}><BarChart3 size={18}/> Analytics <span className="new-pill">LIVE</span></button><button className="nav-item" onClick={() => setShowQr(true)}><QrCode size={18}/> QR code</button></nav><div className="nav-bottom"><button className="nav-item"><Settings size={18}/> Settings</button><div className="plan-card"><div className="plan-icon"><Sparkles size={15}/></div><div><strong>Creator plan</strong><small>7 days left in trial</small></div><ExternalLink size={14}/></div><div className="user-row"><Avatar profile={profile} small/><div><strong>{profile.name}</strong><small>my@email.com</small></div><MoreHorizontal size={17}/></div></div></aside>
     <main className="main-content"><header className="topbar"><button className="menu-btn"><Menu size={20}/></button><div><div className="eyebrow">BIO PAGE / {activeTab === 'analytics' ? 'ANALYTICS' : 'EDITOR'}</div><h1>Your story, one link.</h1></div><div className="top-actions"><div className={published ? 'status published' : 'status'}><span></span>{published ? 'Published' : 'Draft'}</div><button className="icon-button" onClick={() => setShowQr(true)} title="QR code"><QrCode size={18}/></button><button className="share-button" onClick={publish}><Share2 size={16}/> Copy link</button><button className="publish-button" onClick={publish}>{published ? 'Published ✓' : 'Publish'}</button></div></header>
       {activeTab === 'analytics' ? <Analytics links={links} stats={stats}/> : <div className="editor-grid"><section className="editor-column"><div className="section-heading"><div><h2>Content</h2><p>Build your page with blocks that feel like you.</p></div><button className="add-block" onClick={() => setLinkEditor({ type: 'link', title: '', url: '', icon: '↗', color: '#6b5cff' })}><Plus size={16}/> Add block</button></div><div className="content-card"><div className="profile-editor"><label className="avatar-upload"><Avatar profile={profile}/><span className="upload-dot"><Upload size={11}/></span><input type="file" accept="image/*" onChange={uploadAvatar}/></label><div className="profile-fields"><label>DISPLAY NAME<input value={profile.name} onChange={(e) => updateProfile('name', e.target.value)}/></label><label>BIO<textarea value={profile.bio} onChange={(e) => updateProfile('bio', e.target.value)}/></label><label className="handle-field">PAGE URL<div className="url-input"><span>biogen.vn/</span><input value={profile.handle} onChange={(e) => updateProfile('handle', e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}/></div></label></div></div><div className="divider"/><div className="block-list">{links.map((link) => <Block key={link.id} link={link} clicks={stats.byLink[link.id] || 0} onRemove={removeLink} onEdit={setLinkEditor} onDragStart={setDraggedId} onDrop={reorder}/>)}</div><button className="add-link-row" onClick={() => setLinkEditor({ type: 'link', title: '', url: '', icon: '↗', color: '#6b5cff' })}><Plus size={16}/> Add a link block</button></div><div className="tip"><Sparkles size={17}/><span><strong>Make it yours.</strong> Upload an avatar, reorder blocks and switch themes. Changes save automatically.</span></div></section><section className="preview-column"><div className="preview-head"><div><h2>Live preview</h2><p>biogen.vn/{profile.handle}</p></div><button className="preview-share" onClick={publish}><ExternalLink size={15}/></button></div><PhonePreview profile={profile} links={links} theme={theme} onClick={recordClick}/><div className="theme-controls"><div className="control-label"><Palette size={15}/> Quick themes <span>Pick a vibe</span></div><div className="theme-row">{[['aurora','Aurora'],['sunset','Sunset'],['midnight','Midnight']].map(([key, label]) => <button key={key} className={theme === key ? 'theme-swatch selected' : 'theme-swatch'} onClick={() => setTheme(key)}><span className={'swatch '+key}></span>{label}</button>)}</div></div></section></div>}
-    </main>{showQr && <QrModal close={() => setShowQr(false)} url={`https://biogen.vn/${profile.handle}`}/>} {linkEditor && <LinkModal initial={linkEditor} close={() => setLinkEditor(null)} save={saveLink}/>}</div>
+    </main>{showQr && <QrModal close={() => setShowQr(false)} url={publicUrl}/>} {linkEditor && <LinkModal initial={linkEditor} close={() => setLinkEditor(null)} save={saveLink}/>}</div>
 }
 
 function Avatar({ profile, small }) { return profile.avatar ? <img className={small ? 'avatar tiny' : 'avatar large'} src={profile.avatar} alt="Avatar"/> : <div className={small ? 'avatar tiny' : 'avatar large'}>{profile.name.split(' ').map((x) => x[0]).slice(-2).join('')}</div> }
