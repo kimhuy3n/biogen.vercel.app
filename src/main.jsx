@@ -14,7 +14,7 @@ const seedLinks = [
   { id: 3, type: 'video', title: 'Một ngày của mình ✨', url: 'https://youtube.com/watch?v=demo', icon: '▶', color: '#f04491' },
   { id: 4, type: 'product', title: 'Khoá học Content Creator', url: '499.000đ', icon: '✦', color: '#ff9845' },
 ]
-const defaultProfile = { name: 'Hoài My', handle: 'hoaimy', bio: 'Content creator · Chia sẻ điều hay mỗi ngày ✨', avatar: '' }
+const defaultProfile = { name: 'Hoài My', handle: 'hoaimy', bio: 'Content creator · Chia sẻ điều hay mỗi ngày ✨', avatar: '', email: 'huyenkim2506@gmail.com' }
 const getStored = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) || fallback } catch { return fallback } }
 
 function App() {
@@ -45,7 +45,7 @@ function App() {
   useEffect(() => { if (!sessionStorage.getItem('biogen-view-recorded')) { sessionStorage.setItem('biogen-view-recorded', 'true'); setStats((old) => ({ ...old, views: old.views + 1 })) } }, [])
   useEffect(() => {
     if (isPublicPage) return
-    setProfile((old) => old.handle === 'hoaimy' ? { ...old, name: 'Kim Huyen', handle: 'kimhuyen' } : old)
+    setProfile((old) => old.handle === 'hoaimy' ? { ...old, name: 'Kim Huyen', handle: 'kimhuyen', email: 'huyenkim2506@gmail.com' } : { ...old, email: 'huyenkim2506@gmail.com' })
     setLinks((old) => old.map((item) => item.id === 1 ? { ...item, title: 'Facebook', url: 'https://www.facebook.com/kiw.hh/', icon: 'f', color: '#1877f2' } : item.id === 2 ? { ...item, title: 'TikTok', url: 'https://www.tiktok.com/@kiw.hh', icon: '♪', color: '#111111' } : item.id === 3 ? { ...item, type: 'link', title: 'Instagram', url: 'https://www.instagram.com/kiw.h_/', icon: '◎', color: '#e1306c' } : item.id === 4 ? { ...item, type: 'link', title: 'YouTube', url: 'https://www.youtube.com/@kimhuyennguyenthi9425/posts', icon: '▶', color: '#ff0000' } : item))
   }, [isPublicPage])
 
@@ -57,7 +57,7 @@ function App() {
       .then(({ data, error }) => {
         if (error) console.error('Could not load bio page', error)
         if (!cancelled && data) {
-          setProfile(data.profile)
+          setProfile({ ...data.profile, email: 'huyenkim2506@gmail.com' })
           setLinks((data.links || []).map((item) => item.id === 1 ? { ...item, title: 'Facebook', url: 'https://www.facebook.com/kiw.hh/', icon: 'f', color: '#1877f2' } : item.id === 2 ? { ...item, title: 'TikTok', url: 'https://www.tiktok.com/@kiw.hh', icon: '♪', color: '#111111' } : item.id === 3 ? { ...item, type: 'link', title: 'Instagram', url: 'https://www.instagram.com/kiw.h_/', icon: '◎', color: '#e1306c' } : item.id === 4 ? { ...item, type: 'link', title: 'YouTube', url: 'https://www.youtube.com/@kimhuyennguyenthi9425/posts', icon: '▶', color: '#ff0000' } : item))
           setTheme(data.theme || 'aurora')
           setFontFamily(data.font_family || 'sans')
