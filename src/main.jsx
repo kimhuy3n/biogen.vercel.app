@@ -36,6 +36,7 @@ function App() {
   const isPublicPage = Boolean(requestedHandle)
   const [authLoading, setAuthLoading] = useState(Boolean(supabase && !isPublicPage))
   const [remoteLoaded, setRemoteLoaded] = useState(false)
+  const [needsOnboarding, setNeedsOnboarding] = useState(false)
   const publicUrl = `${window.location.origin}/#/${profile.handle}`
 
   useEffect(() => {
@@ -63,7 +64,9 @@ function App() {
     if (!isPublicPage && authLoading) return undefined
     const handle = isPublicPage ? requestedHandle : profile.handle
     let cancelled = false
-    supabase.from('bio_pages').select('profile, links, theme, font_family, published, stats').eq('handle', handle).maybeSingle()
+    const pageQuery = supabase.from('bio_pages').select('user_id, profile, links, theme, font_family, published, stats')
+    const request = isPublicPage ? pageQuery.eq('handle', handle).maybeSingle() : pageQuery.eq('user_id', session.user.id).maybeSingle()
+    request
       .then(({ data, error }) => {
         if (error) console.error('Could not load bio page', error)
         if (!cancelled && data) {
@@ -73,20 +76,24 @@ function App() {
           setFontFamily(data.font_family || 'sans')
           setPublished(Boolean(data.published))
           setStats(data.stats || { views: 0, clicks: 0, byLink: {} })
+          setNeedsOnboarding(false)
+        } else if (!cancelled && !isPublicPage) {
+          setNeedsOnboarding(true)
         }
         if (!cancelled) setRemoteLoaded(true)
       })
     return () => { cancelled = true }
-  }, [authLoading, isPublicPage, requestedHandle, profile.handle])
+  }, [authLoading, isPublicPage, requestedHandle, session?.user?.id])
 
   useEffect(() => {
-    if (!supabase || isPublicPage || !session || !remoteLoaded || !profile.handle) return
+    if (!supabase || isPublicPage || !session || needsOnboarding || !remoteLoaded || !profile.handle) return
     supabase.from('bio_pages').upsert({ handle: profile.handle, user_id: session.user.id, profile, links, theme, font_family: fontFamily, published, stats, updated_at: new Date().toISOString() })
       .then(({ error }) => { if (error) console.error('Could not save bio page', error) })
-  }, [profile, links, theme, fontFamily, published, stats, remoteLoaded, session, isPublicPage])
+  }, [profile, links, theme, fontFamily, published, stats, remoteLoaded, session, isPublicPage, needsOnboarding])
 
   if (isPublicPage) return <PublicPage profile={profile} links={links} theme={theme} fontFamily={fontFamily} onClick={(link) => setStats((old) => ({ ...old, clicks: old.clicks + 1, byLink: { ...old.byLink, [link.id]: (old.byLink[link.id] || 0) + 1 } }))} />
   if (supabase && (authLoading || !session)) return <AuthScreen supabase={supabase} />
+  if (supabase && needsOnboarding) return <Onboarding profile={profile} supabase={supabase} userId={session.user.id} onComplete={(nextProfile) => { setProfile(nextProfile); setLinks(seedLinks.map((item) => item.id === 1 ? { ...item, title: 'Facebook', url: 'https://www.facebook.com/kiw.hh/', icon: 'f', color: '#1877f2' } : item.id === 2 ? { ...item, title: 'TikTok', url: 'https://www.tiktok.com/@kiw.hh', icon: '♪', color: '#111111' } : item.id === 3 ? { ...item, type: 'link', title: 'Instagram', url: 'https://www.instagram.com/kiw.h_/', icon: '◎', color: '#e1306c' } : item.id === 4 ? { ...item, type: 'link', title: 'YouTube', url: 'https://www.youtube.com/@kimhuyennguyenthi9425/posts', icon: '▶', color: '#ff0000' } : item)); setPublished(false); setNeedsOnboarding(false); setRemoteLoaded(true) }} />
 
   const updateProfile = (key, value) => setProfile((old) => ({ ...old, [key]: value }))
   const saveLink = (draft) => {
@@ -132,6 +139,25 @@ function Avatar({ profile, small }) { return profile.avatar ? <img className={sm
 function FontPicker({ value, onChange }) { return <div className="font-picker"><span>Font</span>{[['sans','Clean'],['grotesk','Bold'],['serif','Editorial']].map(([key, label]) => <button key={key} className={value === key ? 'selected '+key : key} onClick={() => onChange(key)}>{label}</button>)}</div> }
 function ShopTools({ onAdd }) { return <div className="shop-tools"><span>Quick add</span><button onClick={onAdd}>＋ Shop link</button></div> }
 function AccountTools({ email, onLogout }) { return <div className="account-tools"><span>{email}</span><button onClick={onLogout}>Đăng xuất</button></div> }
+function Onboarding({ profile, supabase, userId, onComplete }) {
+  const [name, setName] = useState(profile.name === 'Hoài My' ? '' : profile.name)
+  const [handle, setHandle] = useState('')
+  const [bio, setBio] = useState(profile.bio || '')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (event) => {
+    event.preventDefault()
+    const cleanHandle = handle.toLowerCase().trim().replace(/[^a-z0-9_-]/g, '')
+    if (!name.trim() || cleanHandle.length < 3) { setError('Tên và username tối thiểu 3 ký tự là bắt buộc.'); return }
+    setBusy(true); setError('')
+    const { data, error: lookupError } = await supabase.from('bio_pages').select('user_id').eq('handle', cleanHandle).maybeSingle()
+    if (lookupError) { setBusy(false); setError(lookupError.message); return }
+    if (data?.user_id && data.user_id !== userId) { setBusy(false); setError('Username này đã được sử dụng.'); return }
+    setBusy(false)
+    onComplete({ ...profile, name: name.trim(), handle: cleanHandle, bio: bio.trim(), email: profile.email || '' })
+  }
+  return <div className="auth-page"><form className="auth-card" onSubmit={submit}><div className="brand-mark">✦</div><h1>Tạo bio page của bạn</h1><p>Chọn username riêng để có link public của riêng bạn.</p><label>Tên hiển thị<input value={name} onChange={(event) => setName(event.target.value)} required placeholder="Tên của bạn"/></label><label>Username<input value={handle} onChange={(event) => setHandle(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))} required placeholder="yourname"/><small className="handle-hint">Link: /#/{handle || 'yourname'}</small></label><label>Giới thiệu<textarea value={bio} onChange={(event) => setBio(event.target.value)} placeholder="Bạn làm gì?"/></label><button className="auth-submit" disabled={busy}>{busy ? 'Đang tạo…' : 'Tạo bio page'}</button>{error && <small className="auth-error">{error}</small>}</form></div>
+}
 function AuthScreen({ supabase }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
