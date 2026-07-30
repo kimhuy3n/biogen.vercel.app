@@ -108,7 +108,7 @@ function App() {
     setLinks((old) => { const next = [...old]; const from = next.findIndex((x) => x.id === draggedId); const to = next.findIndex((x) => x.id === targetId); const [moved] = next.splice(from, 1); next.splice(to, 0, moved); return next })
     setDraggedId(null)
   }
-  const uploadAvatar = (event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => updateProfile('avatar', reader.result); reader.readAsDataURL(file) }
+  const uploadAvatar = async (event) => { const file = event.target.files?.[0]; if (!file) return; if (supabase && session) { const path = `${session.user.id}/avatar-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '')}`; const { error } = await supabase.storage.from('bio-media').upload(path, file, { upsert: true, contentType: file.type }); if (!error) { const { data } = supabase.storage.from('bio-media').getPublicUrl(path); updateProfile('avatar', data.publicUrl); return } console.error('Avatar upload failed', error) } const reader = new FileReader(); reader.onload = () => updateProfile('avatar', reader.result); reader.readAsDataURL(file) }
   const recordClick = (link) => setStats((old) => ({ ...old, clicks: old.clicks + 1, byLink: { ...old.byLink, [link.id]: (old.byLink[link.id] || 0) + 1 } }))
   const publish = async () => {
     setPublished(true)

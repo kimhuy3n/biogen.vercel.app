@@ -19,6 +19,26 @@ on public.bio_pages
 for insert
 with check (auth.uid() is not null and auth.uid() = user_id);
 
+insert into storage.buckets (id, name, public)
+values ('bio-media', 'bio-media', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Public can view bio media" on storage.objects;
+drop policy if exists "Users can upload their bio media" on storage.objects;
+drop policy if exists "Users can update their bio media" on storage.objects;
+
+create policy "Public can view bio media"
+on storage.objects for select
+using (bucket_id = 'bio-media');
+
+create policy "Users can upload their bio media"
+on storage.objects for insert
+with check (bucket_id = 'bio-media' and auth.uid() is not null and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "Users can update their bio media"
+on storage.objects for update
+using (bucket_id = 'bio-media' and auth.uid()::text = (storage.foldername(name))[1]);
+
 create policy "Signed in users can update their own bio page"
 on public.bio_pages
 for update
