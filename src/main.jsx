@@ -29,10 +29,12 @@ function App() {
   const [draggedId, setDraggedId] = useState(null)
   const [stats, setStats] = useState(() => getStored('biogen-stats', { views: 12482, clicks: 3106, byLink: {} }))
   const [copied, setCopied] = useState(false)
-  const requestedHandle = window.location.pathname.split('/').filter(Boolean)[0]?.toLowerCase()
+  const pathHandle = window.location.pathname.split('/').filter(Boolean)[0]?.toLowerCase()
+  const hashHandle = window.location.hash.match(/^#\/([^/?#]+)/)?.[1]?.toLowerCase()
+  const requestedHandle = pathHandle || hashHandle
   const isPublicPage = Boolean(requestedHandle)
   const [remoteLoaded, setRemoteLoaded] = useState(false)
-  const publicUrl = `${window.location.origin}/${profile.handle}`
+  const publicUrl = `${window.location.origin}/#/${profile.handle}`
 
   useEffect(() => localStorage.setItem('biogen-profile', JSON.stringify(profile)), [profile])
   useEffect(() => localStorage.setItem('biogen-links', JSON.stringify(links)), [links])
