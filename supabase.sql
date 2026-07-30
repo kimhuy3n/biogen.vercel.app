@@ -10,6 +10,8 @@ create table if not exists public.bio_pages (
 
 alter table public.bio_pages enable row level security;
 
+alter table public.bio_pages add column if not exists font_family text not null default 'sans';
+
 create policy "Anyone can read published bio pages"
   on public.bio_pages for select
   using (published = true);
@@ -22,4 +24,3 @@ create policy "Anyone can update bio pages for the MVP"
   on public.bio_pages for update
   using (true)
   with check (true);
-
