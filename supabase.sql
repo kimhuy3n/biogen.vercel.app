@@ -5,11 +5,11 @@ create table if not exists public.bio_pages (
   theme text not null default 'aurora',
   published boolean not null default false,
   stats jsonb not null default '{"views": 0, "clicks": 0, "byLink": {}}'::jsonb,
-  user_id uuid references auth.users(id),
+  user_id uuid,
   updated_at timestamptz not null default now()
 );
 
-alter table public.bio_pages add column if not exists user_id uuid references auth.users(id);
+alter table public.bio_pages add column if not exists user_id uuid;
 alter table public.bio_pages enable row level security;
 
 alter table public.bio_pages add column if not exists font_family text not null default 'sans';
