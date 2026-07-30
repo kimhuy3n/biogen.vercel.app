@@ -30,11 +30,11 @@ function App() {
   const [stats, setStats] = useState(() => getStored('biogen-stats', { views: 12482, clicks: 3106, byLink: {} }))
   const [copied, setCopied] = useState(false)
   const [session, setSession] = useState(null)
-  const [authLoading, setAuthLoading] = useState(Boolean(supabase && !isPublicPage))
   const pathHandle = window.location.pathname.split('/').filter(Boolean)[0]?.toLowerCase()
   const hashHandle = window.location.hash.match(/^#\/([^/?#]+)/)?.[1]?.toLowerCase()
   const requestedHandle = pathHandle || hashHandle
   const isPublicPage = Boolean(requestedHandle)
+  const [authLoading, setAuthLoading] = useState(Boolean(supabase && !isPublicPage))
   const [remoteLoaded, setRemoteLoaded] = useState(false)
   const publicUrl = `${window.location.origin}/#/${profile.handle}`
 
