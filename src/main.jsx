@@ -17,6 +17,9 @@ import './layout-variants.css'
 import './advanced-layouts.css'
 import './typography-presets.css'
 import './customize.css'
+import './save-status.css'
+import './data-deletion.css'
+import './color-sync.css'
 import cloudParadise from './assets/sky/floating-cloud-paradise.png'
 import skyIsland from './assets/sky/sky-island-fantasy.png'
 import glassSky from './assets/sky/glass-sky-layer.png'
@@ -73,6 +76,7 @@ const repairText = (value) => { if (typeof value !== 'string' || !/[ÃÂâ]/.tes
 const repairData = (value) => Array.isArray(value) ? value.map(repairData) : value && typeof value === 'object' ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key, repairData(item)])) : repairText(value)
 const getStored = (key, fallback) => { try { return repairData(JSON.parse(localStorage.getItem(key))) || repairData(fallback) } catch { return repairData(fallback) } }
 const isSafeHttpUrl = (value) => { try { const url = new URL(value); return url.protocol === 'http:' || url.protocol === 'https:' } catch { return false } }
+const cropImageToDataUrl = (src, x, y, zoom, width, height) => new Promise((resolve, reject) => { const source = new Image(); source.onload = () => { const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const context = canvas.getContext('2d'); const scale = Math.max(width / source.width, height / source.height) * zoom; const drawWidth = source.width * scale; const drawHeight = source.height * scale; const offsetX = (width - drawWidth) * (x / 100); const offsetY = (height - drawHeight) * (y / 100); context.drawImage(source, offsetX, offsetY, drawWidth, drawHeight); resolve(canvas.toDataURL('image/jpeg', 0.92)) }; source.onerror = reject; source.crossOrigin = 'anonymous'; source.src = src })
 const FONT_STACKS = { sans: "'DM Sans', sans-serif", grotesk: "'Space Grotesk', sans-serif", serif: "Georgia, 'Times New Roman', serif", rounded: "'Trebuchet MS', sans-serif", mono: "'Courier New', monospace", elegant: "'Baskerville', Georgia, serif", display: "Impact, 'Arial Black', sans-serif", hand: "'Segoe Print', 'Comic Sans MS', cursive", condensed: "'Arial Narrow', Arial, sans-serif", pixel: "'Courier New', monospace", apple: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", editorial: "Georgia, 'Times New Roman', serif", material: "'Arial', sans-serif", linear: "'Inter', 'DM Sans', sans-serif", notion: "'Segoe UI', sans-serif", luxury: "'Baskerville', Georgia, serif", friendly: "'Trebuchet MS', sans-serif", zen: "'Yu Gothic', 'Hiragino Kaku Gothic ProN', sans-serif", startup: "'Space Grotesk', 'DM Sans', sans-serif", ultimate: "'Inter', 'Segoe UI', sans-serif" }
 
 function App() {
@@ -92,15 +96,45 @@ function App() {
   const [draggedId, setDraggedId] = useState(null)
   const [stats, setStats] = useState(() => getStored('biogen-stats', { views: 12482, clicks: 3106, byLink: {} }))
   const [copied, setCopied] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('saved')
   const [session, setSession] = useState(null)
   const pathHandle = window.location.pathname.split('/').filter(Boolean)[0]?.toLowerCase()
   const hashHandle = window.location.hash.match(/^#\/([^/?#]+)/)?.[1]?.toLowerCase()
   const requestedHandle = pathHandle || hashHandle
-  const isPublicPage = Boolean(requestedHandle)
+  const hostname = window.location.hostname.toLowerCase()
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1'
+  const isPlatformHost = hostname === 'biogen.vn' || hostname.endsWith('.biogen.vn') || hostname.endsWith('.vercel.app')
+  const isCustomDomain = !isLocalHost && !isPlatformHost && !requestedHandle
+  const isPublicPage = Boolean(requestedHandle || isCustomDomain)
   const [authLoading, setAuthLoading] = useState(Boolean(supabase && !isPublicPage))
   const [remoteLoaded, setRemoteLoaded] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
   const publicUrl = `${window.location.origin}/#/${profile.handle}`
+
+  useEffect(() => {
+    const displayName = profile.name?.trim() || (requestedHandle ? `@${requestedHandle}` : 'BioGen')
+    const description = profile.bio?.replace(/\s+/g, ' ').trim().slice(0, 160) || 'Create and share your bio page with BioGen.'
+    const title = isPublicPage ? `${displayName} | BioGen` : 'BioGen — Your story, one link.'
+    document.title = title
+    const tags = {
+      description,
+      'og:title': title,
+      'og:description': description,
+      'og:url': window.location.href,
+      'og:type': 'profile',
+      'og:image': profile.avatar || `${window.location.origin}/og-image.png`,
+      'twitter:card': 'summary_large_image',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': profile.avatar || `${window.location.origin}/og-image.png`
+    }
+    Object.entries(tags).forEach(([key, content]) => {
+      const attribute = key.startsWith('og:') ? 'property' : 'name'
+      let meta = document.head.querySelector(`meta[${attribute}="${key}"]`)
+      if (!meta) { meta = document.createElement('meta'); meta.setAttribute(attribute, key); document.head.appendChild(meta) }
+      meta.setAttribute('content', content)
+    })
+  }, [isPublicPage, profile.name, profile.bio, profile.avatar, requestedHandle])
 
   useEffect(() => {
     if (!supabase) return undefined
@@ -125,12 +159,6 @@ function App() {
   useEffect(() => localStorage.setItem('biogen-stats', JSON.stringify(stats)), [stats])
   useEffect(() => { if (!sessionStorage.getItem('biogen-view-recorded')) { sessionStorage.setItem('biogen-view-recorded', 'true'); setStats((old) => ({ ...old, views: old.views + 1 })) } }, [])
   useEffect(() => {
-    return
-    setProfile((old) => old)
-    setLinks((old) => old.map((item) => item.id === 1 ? { ...item, title: 'Facebook', url: 'https://www.facebook.com/kiw.hh/', icon: 'f', color: '#1877f2' } : item.id === 2 ? { ...item, title: 'TikTok', url: 'https://www.tiktok.com/@kiw.hh', icon: '♪', color: '#111111' } : item.id === 3 ? { ...item, type: 'link', title: 'Instagram', url: 'https://www.instagram.com/kiw.h_/', icon: '◎', color: '#e1306c' } : item.id === 4 ? { ...item, type: 'link', title: 'YouTube', url: 'https://www.youtube.com/@kimhuyennguyenthi9425/posts', icon: '▶', color: '#ff0000' } : item))
-  }, [isPublicPage])
-
-  useEffect(() => {
     if (!supabase) { setRemoteLoaded(true); return undefined }
     if (!isPublicPage && (authLoading || !session)) return undefined
     const handle = isPublicPage ? requestedHandle : profile.handle
@@ -140,7 +168,7 @@ function App() {
     // This prevents a returning user from being sent back to onboarding when their
     // saved handle differs from the local default (for example after a rename).
     const request = isPublicPage
-      ? pageQuery.eq('handle', handle).maybeSingle()
+      ? (isCustomDomain ? pageQuery.eq('custom_domain', hostname).maybeSingle() : pageQuery.eq('handle', handle).maybeSingle())
       : pageQuery.eq('user_id', session.user.id).limit(1).maybeSingle()
     request
       .then(({ data, error }) => {
@@ -193,16 +221,18 @@ function App() {
 
   useEffect(() => {
     if (!supabase || isPublicPage || !session || needsOnboarding || !remoteLoaded || !profile.handle) return
+    setSaveStatus('saving')
     const storedProfile = { ...profile, __design: { layout, background_image: backgroundImage, font_family: fontFamily, text_color: textColor } }
     const page = { handle: profile.handle, user_id: session.user.id, profile: storedProfile, links, theme, layout, background_image: backgroundImage, font_family: fontFamily, text_color: textColor, published, updated_at: new Date().toISOString() }
     localStorage.setItem(`biogen-page-${session.user.id}`, JSON.stringify(page))
     supabase.from('bio_pages').upsert(page, { onConflict: 'handle' }).select('handle')
       .then(async ({ error }) => {
-        if (!error) return
+        if (!error) { setSaveStatus('saved'); return }
         const legacyPage = { handle: page.handle, user_id: page.user_id, profile: page.profile, links: page.links, theme: page.theme, published: page.published, stats: stats, updated_at: page.updated_at }
         const fallback = await supabase.from('bio_pages').upsert(legacyPage, { onConflict: 'handle' })
-        if (fallback.error) console.error('Could not save bio page:', fallback.error.message)
+        if (fallback.error) { console.error('Could not save bio page:', fallback.error.message); setSaveStatus('error') } else setSaveStatus('saved')
       })
+      .catch((error) => { console.error('Could not save bio page:', error); setSaveStatus('error') })
   }, [profile, links, theme, layout, backgroundImage, fontFamily, textColor, published, remoteLoaded, session, isPublicPage, needsOnboarding])
 
   useEffect(() => {
@@ -216,6 +246,24 @@ function App() {
       })
     return () => { cancelled = true }
   }, [activeTab, isPublicPage, profile.handle, session?.user?.id])
+
+  useEffect(() => {
+    const host = document.querySelector('.avatar-upload')?.parentElement
+    if (!host) return undefined
+    let panel = host.querySelector('.image-adjuster.avatar-adjuster')
+    if (!profile.avatar) { panel?.remove(); return undefined }
+    if (!panel) { panel = document.createElement('div'); panel.className = 'image-adjuster avatar-adjuster'; host.appendChild(panel) }
+    panel.innerHTML = '<strong>Crop avatar</strong><div class="crop-stage"><img src="' + profile.avatar + '" draggable="false"></div><label>Zoom<input data-axis="zoom" type="range" min="1" max="2" step="0.05" value="' + (profile.avatarZoom ?? 1) + '"></label>'
+    const done = document.createElement('button'); done.type = 'button'; done.className = 'crop-done'; done.textContent = 'Done'; done.onclick = (event) => { event.preventDefault(); event.stopPropagation(); updateProfile('avatarX', current.x); updateProfile('avatarY', current.y); updateProfile('avatarZoom', current.zoom); panel.remove() }; panel.appendChild(done)
+    const image = panel.querySelector('img'); const stage = panel.querySelector('.crop-stage'); let dragging = false; let startX = 0; let startY = 0; const current = { x: profile.avatarX ?? 50, y: profile.avatarY ?? 50, zoom: profile.avatarZoom ?? 1 }
+    const render = () => { image.style.transform = `translate(${(current.x - 50) * 0.5}px, ${(current.y - 50) * 0.5}px) scale(${current.zoom})` }
+    const update = (event) => { current.zoom = Number(event.target.value); render(); updateProfile('avatarZoom', current.zoom) }
+    const down = (event) => { dragging = true; startX = event.clientX; startY = event.clientY; stage.setPointerCapture(event.pointerId) }
+    const move = (event) => { if (!dragging) return; current.x = Math.max(0, Math.min(100, current.x - (event.clientX - startX) * 0.35)); current.y = Math.max(0, Math.min(100, current.y - (event.clientY - startY) * 0.35)); render(); updateProfile('avatarX', current.x); updateProfile('avatarY', current.y); startX = event.clientX; startY = event.clientY }
+    const up = () => { dragging = false }
+    render(); stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); panel.querySelectorAll('input').forEach((input) => input.addEventListener('input', update))
+    return () => { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); panel?.remove() }
+  }, [profile.avatar])
 
   const recordClick = (link) => {
     if (!isPublicPage) return
@@ -233,7 +281,8 @@ function App() {
   const updateProfile = (key, value) => setProfile((old) => ({ ...old, [key]: value }))
   const saveLink = (draft) => {
     if (!draft.title.trim() || !draft.url.trim()) return
-    const normalized = { ...draft, title: draft.title.trim(), url: draft.url.trim(), category: draft.category || (draft.type === 'product' ? 'shop' : 'other'), price: draft.price?.trim() || '' }
+    if (draft.type !== 'product' && !isSafeHttpUrl(draft.url.trim())) { window.alert('URL must start with http:// or https://.'); return }
+    const normalized = { ...draft, title: draft.title.trim(), url: draft.url.trim(), color: /^#[0-9a-f]{6}$/i.test(draft.color || '') ? draft.color : '#6b5cff', category: draft.category || (draft.type === 'product' ? 'shop' : 'other'), price: draft.price?.trim() || '' }
     setLinks((old) => draft.id ? old.map((item) => item.id === draft.id ? normalized : item) : [...old, { ...normalized, id: Date.now() }])
     setLinkEditor(null)
   }
@@ -263,14 +312,14 @@ function App() {
   }
 
   return <div className={backgroundImage ? 'app-shell has-custom-background' : 'app-shell'} style={{ '--selected-sky': backgroundImage ? `url(${backgroundImage})` : 'none', '--bio-font-family': fontFamily === 'serif' ? "Georgia, 'Times New Roman', serif" : fontFamily === 'mono' ? "'Courier New', monospace" : fontFamily === 'rounded' ? "'Trebuchet MS', sans-serif" : fontFamily === 'grotesk' ? "'Space Grotesk', sans-serif" : "'DM Sans', sans-serif" }}><button className="customize-toggle" onClick={() => setCustomizeOpen((open) => !open)}>{customizeOpen ? '− Hide Customize' : '+ Customize'}</button><div className={customizeOpen ? 'design-tools-panel' : 'design-tools-panel collapsed'}><div className="design-tools-title">Customize page <small>Design</small></div><FontPicker value={fontFamily} onChange={setFontFamily}/><TextColorPicker value={textColor} onChange={setTextColor}/><div className="background-section"><ColorBackgroundPicker theme={theme} onThemeChange={setTheme} onChange={setBackgroundImage}/></div><PrimaryLayoutPicker value={layout} onChange={setLayout}/><div className="sky-library-section"><BackgroundTools value={backgroundImage} onChange={setBackgroundImage} supabase={supabase} session={session}/><SkyThemeLibrary value={backgroundImage} onChange={setBackgroundImage}/></div><AdvancedLayoutLibrary value={layout} onChange={setLayout}/></div>
-    <ProductTools supabase={supabase} session={session} onSave={(product) => setLinks((old) => [...old, product])}/><AccountTools email={session?.user?.email} onLogout={() => supabase?.auth.signOut()}/>{supabase && <SecurityTools email={session?.user?.email}/>} 
+    <ProductTools supabase={supabase} session={session} onSave={(product) => setLinks((old) => [...old, product])}/><AccountTools email={session?.user?.email} onLogout={() => supabase?.auth.signOut()}/>{supabase && <SecurityTools email={session?.user?.email}/>} {supabase && session && <DataDeletionTools userId={session.user.id}/>}
     <aside className="sidebar"><div className="brand"><div className="brand-mark">✦</div><span>biogen</span></div><div className="workspace-label">WORKSPACE</div><div className="profile-mini"><Avatar profile={profile} small/><div><strong>{profile.name}</strong><small>@{profile.handle}</small></div><MoreHorizontal size={17}/></div><nav className="main-nav"><button className={activeTab === 'editor' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('editor')}><Link2 size={18}/> Bio page</button><button className={activeTab === 'analytics' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('analytics')}><BarChart3 size={18}/> Analytics <span className="new-pill">LIVE</span></button><button className="nav-item" onClick={() => setShowQr(true)}><QrCode size={18}/> QR code</button></nav><div className="nav-bottom"><button className="nav-item"><Settings size={18}/> Settings</button><div className="plan-card"><div className="plan-icon"><Sparkles size={15}/></div><div><strong>Creator plan</strong><small>7 days left in trial</small></div><ExternalLink size={14}/></div><div className="user-row"><Avatar profile={profile} small/><div><strong>{profile.name}</strong><small>my@email.com</small></div><MoreHorizontal size={17}/></div></div></aside>
-    <main className="main-content"><header className="topbar"><button className="menu-btn"><Menu size={20}/></button><div><div className="eyebrow">BIO PAGE / {activeTab === 'analytics' ? 'ANALYTICS' : 'EDITOR'}</div><h1>Your story, one link.</h1></div><div className="top-actions"><div className={published ? 'status published' : 'status'}><span></span>{published ? 'Published' : 'Draft'}</div><button className="icon-button" onClick={() => setShowQr(true)} title="QR code"><QrCode size={18}/></button><button className="share-button" onClick={publish}><Share2 size={16}/> {copied ? 'Copied ✓' : 'Copy link'}</button><button className="publish-button" onClick={publish}>{published ? 'Published ✓' : 'Publish'}</button></div></header>
-      {activeTab === 'analytics' ? <AnalyticsDashboard links={links} stats={stats} supabase={supabase} handle={profile.handle}/> : <div className="editor-grid"><section className="editor-column"><div className="section-heading"><div><h2>Content</h2><p>Build your page with blocks that feel like you.</p></div><button className="add-block" onClick={() => setLinkEditor({ type: 'link', title: '', url: '', icon: '↗', color: '#6b5cff' })}><Plus size={16}/> Add block</button></div><div className="content-card"><div className="profile-editor"><label className="avatar-upload"><Avatar profile={profile}/><span className="upload-dot"><Upload size={11}/></span><input type="file" accept="image/*" onChange={uploadAvatar}/></label><div className="profile-fields"><label>DISPLAY NAME<input value={profile.name} onChange={(e) => updateProfile('name', e.target.value)}/></label><label>BIO<textarea value={profile.bio} onChange={(e) => updateProfile('bio', e.target.value)}/></label><label className="handle-field">PAGE URL<div className="url-input"><span>biogen.vn/</span><input value={profile.handle} onChange={(e) => updateProfile('handle', e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}/></div></label></div></div><div className="divider"/><div className="block-list">{links.map((link) => <Block key={link.id} link={link} clicks={stats.byLink[link.id] || 0} onRemove={removeLink} onEdit={setLinkEditor} onDragStart={setDraggedId} onDrop={reorder}/>)}</div><button className="add-link-row" onClick={() => setLinkEditor({ type: 'link', title: '', url: '', icon: '↗', color: '#6b5cff' })}><Plus size={16}/> Add a link block</button></div><div className="tip"><Sparkles size={17}/><span><strong>Make it yours.</strong> Upload an avatar, reorder blocks and switch themes. Changes save automatically.</span></div></section><section className="preview-column"><div className="preview-head"><div><h2>Live preview</h2><p>biogen.vn/{profile.handle}</p></div><button className="preview-share" onClick={publish}><ExternalLink size={15}/></button></div><PhonePreview profile={profile} links={links} theme={theme} layout={layout} onClick={recordClick}/><div className="theme-controls"><div className="control-label"><Palette size={15}/> Colors <span>Pick a palette</span></div><div className="theme-row">{[['aurora','Aurora'],['sunset','Sunset'],['midnight','Midnight'],['ocean','Ocean'],['forest','Forest'],['candy','Candy'],['mono','Mono']].map(([key, label]) => <button key={key} className={theme === key ? 'theme-swatch selected' : 'theme-swatch'} onClick={() => setTheme(key)}><span className={'swatch '+key}></span>{label}</button>)}</div><div className="control-label layout-label">Layout <span>Social styles</span></div><div className="theme-row">{[['classic','Classic'],['card','Card'],['minimal','Minimal'],['grid','Grid'],['spotlight','Spotlight'],['glass','Glass'],['magazine','Magazine'],['neon','Neon'],['social','TikTok'],['instagram','Instagram']].map(([key, label]) => <button key={key} className={layout === key ? 'theme-swatch selected' : 'theme-swatch'} onClick={() => setLayout(key)}>{label}</button>)}</div></div></section></div>}
+    <main className="main-content"><header className="topbar"><button className="menu-btn"><Menu size={20}/></button><div><div className="eyebrow">BIO PAGE / {activeTab === 'analytics' ? 'ANALYTICS' : 'EDITOR'}</div><h1>Your story, one link.</h1></div><div className="top-actions"><div className={`status ${published ? 'published' : ''} ${saveStatus}`}><span></span>{saveStatus === 'saving' ? 'Saving...' : saveStatus === 'error' ? 'Save error' : published ? 'Published' : 'Saved'}</div><button className="icon-button" onClick={() => setShowQr(true)} title="QR code"><QrCode size={18}/></button><button className="share-button" onClick={publish}><Share2 size={16}/> {copied ? 'Copied ✓' : 'Copy link'}</button><button className="publish-button" onClick={publish}>{published ? 'Published ✓' : 'Publish'}</button></div></header>
+     {activeTab === 'analytics' ? <AnalyticsDashboard links={links} stats={stats} supabase={supabase} handle={profile.handle}/> : <div className="editor-grid"><section className="editor-column"><div className="section-heading"><div><h2>Content</h2><p>Build your page with blocks that feel like you.</p></div><button className="add-block" onClick={() => setLinkEditor({ type: 'link', title: '', url: '', icon: '↗', color: '#6b5cff' })}><Plus size={16}/> Add block</button></div><div className="content-card"><div className="profile-editor"><label className="avatar-upload"><Avatar profile={profile}/><span className="upload-dot"><Upload size={11}/></span><input type="file" accept="image/*" onChange={uploadAvatar}/></label><div className="profile-fields"><label>DISPLAY NAME<input value={profile.name} onChange={(e) => updateProfile('name', e.target.value)}/></label><label>BIO<textarea value={profile.bio} onChange={(e) => updateProfile('bio', e.target.value)}/></label><label className="handle-field">PAGE URL<div className="url-input"><span>biogen.vn/</span><input value={profile.handle} onChange={(e) => updateProfile('handle', e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}/></div></label></div></div><div className="divider"/><div className="block-list">{links.map((link) => <Block key={link.id} link={link} clicks={stats.byLink[link.id] || 0} onRemove={removeLink} onEdit={setLinkEditor} onDragStart={setDraggedId} onDrop={reorder}/>)}</div><button className="add-link-row" onClick={() => setLinkEditor({ type: 'link', title: '', url: '', icon: '↗', color: '#6b5cf' })}><Plus size={16}/> Add a link block</button></div><div className="tip"><Sparkles size={17}/><span><strong>Make it yours.</strong> Upload an avatar, reorder blocks and switch themes. Changes save automatically.</span></div></section><section className="preview-column"><div className="preview-head"><div><h2>Live preview</h2><p>biogen.vn/{profile.handle}</p></div><button className="preview-share" onClick={publish}><ExternalLink size={15}/></button></div><PhonePreview profile={profile} links={links} theme={theme} layout={layout} textColor={textColor} onClick={recordClick}/><div className="theme-controls"><div className="control-label"><Palette size={15}/> Colors <span>Pick a palette</span></div><div className="theme-row">{[['aurora','Aurora'],['sunset','Sunset'],['midnight','Midnight'],['ocean','Ocean'],['forest','Forest'],['candy','Candy'],['mono','Mono']].map(([key, label]) => <button key={key} className={theme === key ? 'theme-swatch selected' : 'theme-swatch'} onClick={() => setTheme(key)}><span className={'swatch '+key}></span>{label}</button>)}</div><div className="control-label layout-label">Layout <span>Social styles</span></div><div className="theme-row">{[['classic','Classic'],['card','Card'],['minimal','Minimal'],['grid','Grid'],['spotlight','Spotlight'],['glass','Glass'],['magazine','Magazine'],['neon','Neon'],['social','TikTok'],['instagram','Instagram']].map(([key, label]) => <button key={key} className={layout === key ? 'theme-swatch selected' : 'theme-swatch'} onClick={() => setLayout(key)}>{label}</button>)}</div></div></section></div>}
     </main>{showQr && <QrModal close={() => setShowQr(false)} url={publicUrl}/>} {linkEditor && <LinkModal initial={linkEditor} close={() => setLinkEditor(null)} save={saveLink}/>}</div>
 }
 
-function Avatar({ profile, small }) { return profile.avatar ? <img className={small ? 'avatar tiny' : 'avatar large'} src={profile.avatar} alt="Avatar" style={{ objectPosition: `${profile.avatarX ?? 50}% ${profile.avatarY ?? 50}%`, transform: `scale(${profile.avatarZoom ?? 1})` }}/> : <div className={small ? 'avatar tiny' : 'avatar large'}>{profile.name.split(' ').map((x) => x[0]).slice(-2).join('')}</div> }
+function Avatar({ profile, small }) { return profile.avatar ? <div className={small ? 'avatar tiny' : 'avatar large'}><img src={profile.avatar} alt="Avatar" style={{ objectPosition: `${profile.avatarX ?? 50}% ${profile.avatarY ?? 50}%`, transform: `translate(${((profile.avatarX ?? 50) - 50) * 0.5}px, ${((profile.avatarY ?? 50) - 50) * 0.5}px) scale(${profile.avatarZoom ?? 1})` }}/></div> : <div className={small ? 'avatar tiny' : 'avatar large'}>{profile.name.split(' ').map((x) => x[0]).slice(-2).join('')}</div> }
 function BackgroundTools({ value, onChange, supabase, session }) { const inputRef = useRef(null); const [busy, setBusy] = useState(false); const choose = async (event) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return; setBusy(true); if (supabase && session) { const path = `${session.user.id}/background-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '')}`; const upload = await supabase.storage.from('bio-media').upload(path, file, { upsert: true, contentType: file.type }); if (!upload.error) onChange(supabase.storage.from('bio-media').getPublicUrl(path).data.publicUrl) } else { const reader = new FileReader(); reader.onload = () => onChange(reader.result); reader.readAsDataURL(file) } setBusy(false) }; return <div className="background-tools"><span>Background</span><button onClick={() => onChange('')} className={!value ? 'selected' : ''}>Default</button><button onClick={() => onChange('radial-gradient(circle at 20% 20%,#fff 0 1px,transparent 2px),radial-gradient(circle at 70% 35%,#fff 0 1px,transparent 2px),linear-gradient(160deg,#050816,#18204d)')}>Night sky</button><button onClick={() => onChange('linear-gradient(160deg,#12372a,#3f8f62 55%,#b6d98c)')}>Nature</button><button onClick={() => inputRef.current?.click()} disabled={busy}>{busy ? 'Uploading…' : 'Upload image'}</button><input ref={inputRef} type="file" accept="image/*" onChange={choose}/></div> }
 function UploadBackground({ onChange }) { const inputRef = useRef(null); const [busy, setBusy] = useState(false); const choose = (event) => { const file = event.target.files?.[0]; if (!file || !file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return; setBusy(true); const reader = new FileReader(); reader.onload = () => { onChange(reader.result); setBusy(false) }; reader.onerror = () => setBusy(false); reader.readAsDataURL(file) }; return <><button className="local-background-upload" onClick={() => inputRef.current?.click()} disabled={busy}>{busy ? 'Loading image…' : 'Upload image'}</button><input ref={inputRef} className="hidden-background-input" type="file" accept="image/*" onChange={choose}/></> }
 function SkyThemeLibrary({ value, onChange }) { return <div className="sky-theme-library"><strong>Sky theme library</strong><small>23 generated premium backgrounds · independent from layout</small><UploadBackground onChange={onChange}/><div className="sky-theme-grid">{SKY_THEMES.map(([key, label, image]) => <button key={key} className={value === image ? 'sky-theme selected' : 'sky-theme'} onClick={() => onChange(image)}><img src={image} alt="" loading="lazy" decoding="async"/><span>{label}</span></button>)}</div></div> }
@@ -286,11 +335,32 @@ function ProductTools({ supabase, session, onSave }) {
   const [price, setPrice] = useState('')
   const [url, setUrl] = useState('')
   const [image, setImage] = useState('')
+  const [imageX, setImageX] = useState(50)
+  const [imageY, setImageY] = useState(50)
+  const [imageZoom, setImageZoom] = useState(1)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [navHost, setNavHost] = useState(null)
   useEffect(() => { const openProduct = () => setOpen(true); window.addEventListener('biogen-open-product', openProduct); return () => window.removeEventListener('biogen-open-product', openProduct) }, [])
   useEffect(() => { setNavHost(document.querySelector('.main-nav')) }, [])
+  useEffect(() => {
+    const form = document.querySelector('.product-modal')
+    if (!form || !image) return undefined
+    const preview = form.querySelector('.product-image-preview')
+    if (preview) { preview.style.objectFit = 'cover'; preview.style.objectPosition = `${imageX}% ${imageY}%`; preview.style.transform = `scale(${imageZoom})` }
+    let panel = form.querySelector('.image-adjuster.product-adjuster')
+    if (!panel) { panel = document.createElement('div'); panel.className = 'image-adjuster product-adjuster'; form.appendChild(panel) }
+    panel.innerHTML = '<strong>Crop product image</strong><div class="crop-stage"><img src="' + image + '" draggable="false"></div><label>Zoom<input data-axis="zoom" type="range" min="1" max="2" step="0.05" value="' + imageZoom + '"></label>'
+    const done = document.createElement('button'); done.type = 'button'; done.className = 'crop-done'; done.textContent = 'Done'; done.onclick = (event) => { event.preventDefault(); event.stopPropagation(); setImageX(current.x); setImageY(current.y); setImageZoom(current.zoom); panel.remove() }; panel.appendChild(done)
+    const cropImage = panel.querySelector('img'); const stage = panel.querySelector('.crop-stage'); let dragging = false; let startX = 0; let startY = 0; const current = { x: imageX, y: imageY, zoom: imageZoom }
+    const render = () => { cropImage.style.transform = `translate(${(current.x - 50) * 0.5}px, ${(current.y - 50) * 0.5}px) scale(${current.zoom})` }
+    const update = (event) => { current.zoom = Number(event.target.value); render(); setImageZoom(current.zoom) }
+    const down = (event) => { dragging = true; startX = event.clientX; startY = event.clientY; stage.setPointerCapture(event.pointerId) }
+    const move = (event) => { if (!dragging) return; current.x = Math.max(0, Math.min(100, current.x - (event.clientX - startX) * 0.35)); current.y = Math.max(0, Math.min(100, current.y - (event.clientY - startY) * 0.35)); render(); setImageX(current.x); setImageY(current.y); startX = event.clientX; startY = event.clientY }
+    const up = () => { dragging = false }
+    render(); stage.addEventListener('pointerdown', down); stage.addEventListener('pointermove', move); stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up); panel.querySelectorAll('input').forEach((input) => input.addEventListener('input', update))
+    return () => { stage.removeEventListener('pointerdown', down); stage.removeEventListener('pointermove', move); stage.removeEventListener('pointerup', up); stage.removeEventListener('pointercancel', up); panel?.remove() }
+  }, [image])
   const chooseImage = (event) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -316,8 +386,8 @@ function ProductTools({ supabase, session, onSave }) {
     } else {
       imageUrl = image
     }
-    onSave({ id: Date.now(), type: 'product', category: 'shop', title: title.trim(), url: url.trim(), price: price.trim(), image: imageUrl, icon: '🛍', color: '#ff6b35' })
-    setTitle(''); setPrice(''); setUrl(''); setImage(''); setError(''); setBusy(false); setOpen(false)
+    onSave({ id: Date.now(), type: 'product', category: 'shop', title: title.trim(), url: url.trim(), price: price.trim(), image: imageUrl, imageX, imageY, imageZoom, icon: '🛍', color: '#ff6b35' })
+    setTitle(''); setPrice(''); setUrl(''); setImage(''); setImageX(50); setImageY(50); setImageZoom(1); setError(''); setBusy(false); setOpen(false)
   }
   return <>{navHost && createPortal(<button className="nav-item" onClick={() => { setError(''); setOpen(true) }}><Plus size={18}/> Product</button>, navHost)}{open && <div className="modal-backdrop" onClick={() => setOpen(false)}><form className="link-modal product-modal" onSubmit={save} onClick={(event) => event.stopPropagation()}><button type="button" className="close-modal" onClick={() => setOpen(false)}>×</button><h2>Thêm sản phẩm</h2><p>Gắn ảnh, giá và link mua hàng.</p><label>ẢNH SẢN PHẨM<input name="image" type="file" accept="image/*" onChange={chooseImage}/></label>{image && <img className="product-image-preview" src={image} alt="Preview"/>}{error && <small className="auth-error">{error}</small>}<label>TÊN SẢN PHẨM<input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="Tên sản phẩm"/></label><label>GIÁ<input value={price} onChange={(event) => setPrice(event.target.value)} placeholder="499.000đ"/></label><label>LINK MUA HÀNG<input value={url} onChange={(event) => setUrl(event.target.value)} required placeholder="https://shopee.vn/..."/></label><div className="modal-buttons"><button type="button" onClick={() => setOpen(false)}>Hủy</button><button className="primary-modal" disabled={busy}>{busy ? 'Đang lưu…' : 'Thêm sản phẩm'}</button></div></form></div>}</>
 }
@@ -342,6 +412,30 @@ function SecurityTools({ email }) {
   return <>{<button className="security-tools" onClick={() => { setOpen(true); loadFactors() }}>Account</button>}{open && <div className="modal-backdrop" onClick={() => setOpen(false)}><div className="link-modal" onClick={(event) => event.stopPropagation()}><button className="close-modal" onClick={() => setOpen(false)}>×</button><h2>Account security</h2><p>{email}</p><button className="primary-modal" onClick={reset}>Reset password</button><hr/><h3>Two-factor authentication</h3>{factor && !qrCode ? <p className="auth-message">Bảo mật 2 lớp đang bật.</p> : !qrCode ? <button className="primary-modal" onClick={startMfa} disabled={busy}>{busy ? 'Đang chuẩn bị…' : 'Bật bảo mật 2 lớp'}</button> : <><p>Quét mã QR bằng Google Authenticator hoặc Authy, sau đó nhập mã 6 số.</p><img className="mfa-qr" src={qrCode} alt="QR code for authenticator"/><input value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" placeholder="Mã 6 số"/><button className="primary-modal" onClick={verifyMfa} disabled={busy || code.length !== 6}>Xác nhận 2 lớp</button></>}{message && <small className="auth-message">{message}</small>}</div></div>}</>
 }
 function AccountTools({ email, onLogout }) { const logout = async () => { await onLogout?.(); window.location.assign('/'); }; return <div className="account-tools"><span>{email}</span><button onClick={logout}>Đăng xuất</button></div> }
+function DataDeletionTools({ userId }) {
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState('')
+  const [navHost, setNavHost] = useState(null)
+  useEffect(() => { setNavHost(document.querySelector('.main-nav')) }, [])
+  const deleteData = async () => {
+    if (!window.confirm('Delete your BioGen page and uploaded media? This cannot be undone.')) return
+    setBusy(true); setMessage('')
+    try {
+      const { data: files, error: listError } = await supabase.storage.from('bio-media').list(userId)
+      if (listError) throw listError
+      const paths = (files || []).map((file) => `${userId}/${file.name}`)
+      if (paths.length) {
+        const { error: removeError } = await supabase.storage.from('bio-media').remove(paths)
+        if (removeError) throw removeError
+      }
+      const { error } = await supabase.from('bio_pages').delete().eq('user_id', userId)
+      if (error) throw error
+      localStorage.removeItem(`biogen-page-${userId}`); setMessage('Your BioGen data was deleted.')
+    } catch (error) { setMessage(error.message || 'Could not delete your data.') }
+    setBusy(false)
+  }
+  return navHost ? createPortal(<><button className="nav-item data-delete-nav" onClick={deleteData} disabled={busy}>{busy ? 'Deleting...' : 'Delete my BioGen data'}</button>{message && <small className="data-delete-message">{message}</small>}</>, navHost) : null
+}
 function Onboarding({ profile, supabase, userId, onComplete }) {
   const [name, setName] = useState('')
   const [handle, setHandle] = useState('')
@@ -382,10 +476,10 @@ function AuthScreen({ supabase }) {
   const resend = async () => { setBusy(true); const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${window.location.origin}/` } }); setMessage(error ? error.message : 'Đã gửi lại email xác nhận. Hãy kiểm tra Inbox/Spam.'); setBusy(false) }
   return <div className="auth-page"><form className="auth-card" onSubmit={submit}><div className="brand-mark">✦</div><h1>{mode === 'login' ? 'Đăng nhập BioGen' : 'Tạo tài khoản BioGen'}</h1><p>Quản lý bio page an toàn bằng tài khoản của bạn.</p><label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required placeholder="you@example.com"/></label><label>Mật khẩu<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={6} placeholder="Tối thiểu 6 ký tự"/></label><button className="auth-submit" disabled={busy}>{busy ? 'Đang xử lý…' : mode === 'login' ? 'Đăng nhập' : 'Đăng ký'}</button>{message && <small className="auth-message">{message}</small>}{canResend && <button type="button" className="auth-switch" onClick={resend} disabled={busy}>Gửi lại email xác nhận</button>}<button type="button" className="auth-switch" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); setCanResend(false) }}>{mode === 'login' ? 'Chưa có tài khoản? Đăng ký' : 'Đã có tài khoản? Đăng nhập'}</button></form></div>
 }
-function LinkVisual({ link, className }) { return <span className={`${className} ${link.type === 'product' ? 'product-visual' : ''}`} style={{ background: link.color }}>{link.image ? <img src={link.image} alt=""/> : link.type === 'video' ? <Play size={15} fill="white"/> : link.icon}</span> }
+function LinkVisual({ link, className }) { return <span className={`${className} ${link.type === 'product' ? 'product-visual' : ''}`} style={{ background: link.color }}>{link.image ? <img src={link.image} alt="" style={{ objectPosition: `${link.imageX ?? 50}% ${link.imageY ?? 50}%`, transform: `translate(${((link.imageX ?? 50) - 50) * 0.5}px, ${((link.imageY ?? 50) - 50) * 0.5}px) scale(${link.imageZoom ?? 1})` }}/> : link.type === 'video' ? <Play size={15} fill="white"/> : link.icon}</span> }
 function Block({ link, clicks, onRemove, onEdit, onDragStart, onDrop }) { return <div className="block-row" draggable onDragStart={() => onDragStart(link.id)} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(link.id)}><GripVertical className="drag" size={17}/><LinkVisual link={link} className="block-icon"/><button className="block-copy" onClick={() => onEdit(link)}><strong>{link.title}</strong><small>{link.price ? `${link.price} · ` : ''}{link.url}{clicks ? ` · ${clicks} clicks` : ''}</small></button>{link.category === 'shop' && <span className="sale-tag">SHOP</span>}<button className="more-block" onClick={() => onEdit(link)}><MoreHorizontal size={18}/></button><button className="delete-block" onClick={() => onRemove(link.id)}><Trash2 size={15}/></button></div> }
-function PhonePreview({ profile, links, theme, layout, onClick }) { return <div className={'phone '+theme+' layout-'+layout}><div className="phone-notch"></div><div className="phone-content"><div className="phone-menu">•••</div><div className="phone-avatar">{profile.avatar ? <img src={profile.avatar} alt="" style={{ objectPosition: `${profile.avatarX ?? 50}% ${profile.avatarY ?? 50}%`, transform: `scale(${profile.avatarZoom ?? 1})` }}/> : profile.name.split(' ').map((x) => x[0]).slice(-2).join('')}</div><h3>{profile.name}</h3><p>{profile.bio}</p><div className="socials"><span>f</span><span>◎</span><span>▶</span></div><div className="phone-links">{links.map((link) => <button className="phone-link" key={link.id} onClick={() => onClick(link)}><LinkVisual link={link} className="phone-link-icon"/><strong>{link.title}</strong>{link.price && <small className="phone-price">{link.price}</small>}<MoreHorizontal size={16}/></button>)}</div><div className="powered">✦ biogen</div></div></div> }
-function PublicPage({ profile, links, theme, layout, backgroundImage, fontFamily, onClick }) { const bg = backgroundImage?.includes('gradient') ? backgroundImage : backgroundImage ? `linear-gradient(#1116,#1116), url(${backgroundImage})` : undefined; return <div className={'public-page '+theme+' layout-'+layout+' font-'+fontFamily} style={bg ? { backgroundImage: bg } : undefined}><div className="public-card"><div className="public-menu">•••</div><div className="public-avatar">{profile.avatar ? <img src={profile.avatar} alt={profile.name} style={{ objectPosition: `${profile.avatarX ?? 50}% ${profile.avatarY ?? 50}%`, transform: `scale(${profile.avatarZoom ?? 1})` }}/> : profile.name.split(' ').map((x) => x[0]).slice(-2).join('')}</div><h1>{profile.name}</h1><p>{profile.bio}</p><div className="socials"><span>f</span><span>◎</span><span>▶</span></div><div className="public-links">{links.map((link) => <button className="public-link" key={link.id} onClick={() => { onClick(link); if (isSafeHttpUrl(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer') }}><LinkVisual link={link} className="phone-link-icon"/><strong>{link.title}{link.price && <small className="public-price">{link.price}</small>}</strong><MoreHorizontal size={17}/></button>)}</div><div className="public-brand">✦ biogen</div></div></div> }
+function PhonePreview({ profile, links, theme, layout, onClick }) { return <div className={'phone '+theme+' layout-'+layout}><div className="phone-notch"></div><div className="phone-content"><div className="phone-menu">•••</div><div className="phone-avatar">{profile.avatar ? <img src={profile.avatar} alt="" style={{ objectPosition: `${profile.avatarX ?? 50}% ${profile.avatarY ?? 50}%`, transform: `translate(${((profile.avatarX ?? 50) - 50) * 0.5}px, ${((profile.avatarY ?? 50) - 50) * 0.5}px) scale(${profile.avatarZoom ?? 1})` }}/> : profile.name.split(' ').map((x) => x[0]).slice(-2).join('')}</div><h3>{profile.name}</h3><p>{profile.bio}</p><div className="socials"><span>f</span><span>◎</span><span>▶</span></div><div className="phone-links">{links.map((link) => <button className="phone-link" key={link.id} onClick={() => onClick(link)}><LinkVisual link={link} className="phone-link-icon"/><strong>{link.title}</strong>{link.price && <small className="phone-price">{link.price}</small>}<MoreHorizontal size={16}/></button>)}</div><div className="powered">✦ biogen</div></div></div> }
+function PublicPage({ profile, links, theme, layout, backgroundImage, fontFamily, onClick }) { const bg = backgroundImage?.includes('gradient') ? backgroundImage : backgroundImage ? `linear-gradient(#1116,#1116), url(${backgroundImage})` : undefined; return <div className={'public-page '+theme+' layout-'+layout+' font-'+fontFamily} style={bg ? { backgroundImage: bg } : undefined}><div className="public-card"><div className="public-menu">•••</div><div className="public-avatar">{profile.avatar ? <img src={profile.avatar} alt={profile.name} style={{ objectPosition: `${profile.avatarX ?? 50}% ${profile.avatarY ?? 50}%`, transform: `translate(${((profile.avatarX ?? 50) - 50) * 0.5}px, ${((profile.avatarY ?? 50) - 50) * 0.5}px) scale(${profile.avatarZoom ?? 1})` }}/> : profile.name.split(' ').map((x) => x[0]).slice(-2).join('')}</div><h1>{profile.name}</h1><p>{profile.bio}</p><div className="socials"><span>f</span><span>◎</span><span>▶</span></div><div className="public-links">{links.map((link) => <button className="public-link" key={link.id} onClick={() => { onClick(link); if (isSafeHttpUrl(link.url)) window.open(link.url, '_blank', 'noopener,noreferrer') }}><LinkVisual link={link} className="phone-link-icon"/><strong>{link.title}{link.price && <small className="public-price">{link.price}</small>}</strong><MoreHorizontal size={17}/></button>)}</div><div className="public-brand">✦ biogen</div></div></div> }
 function AnalyticsDashboard({ links, stats, supabase, handle }) {
   const [liveStats, setLiveStats] = useState(stats)
   const [refreshing, setRefreshing] = useState(false)

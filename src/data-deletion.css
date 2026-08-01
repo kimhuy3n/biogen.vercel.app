@@ -1,0 +1,15 @@
+.data-delete-nav { color: #c85c6b !important; }
+.data-delete-nav:hover { background: #fff1f3 !important; color: #b34153 !important; }
+.data-delete-nav:disabled { opacity: .6; cursor: wait; }
+.data-delete-message { display: block; padding: 4px 12px; color: #888; font-size: 9px; }
+.image-adjuster { position: fixed; z-index: 30; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; gap: 10px; width: min(360px, calc(100vw - 32px)); padding: 20px; border: 1px solid #ecebf3; border-radius: 16px; background: #fff; box-shadow: 0 24px 80px #27243a55; }
+.image-adjuster:before { content: ''; position: fixed; z-index: -1; inset: -100vmax; background: #27243a88; }
+.image-adjuster strong { color: #686574; font-size: 10px; }
+.image-adjuster label { display: grid; grid-template-columns: 70px 1fr; align-items: center; font-size: 9px; }
+.image-adjuster input { margin: 0; padding: 0; border: 0; }
+.avatar-adjuster, .product-adjuster { width: min(360px, calc(100vw - 32px)); margin: 0; }
+.crop-stage { width: 118px; height: 118px; margin: 2px auto 6px; overflow: hidden; border-radius: 50%; background: #ecebf3; cursor: grab; touch-action: none; }
+.product-adjuster .crop-stage { width: 180px; height: 120px; border-radius: 9px; }
+.crop-stage:active { cursor: grabbing; }
+.crop-stage img { width: 100%; height: 100%; object-fit: cover; user-select: none; pointer-events: none; transform-origin: center; }
+.crop-done { border: 0; border-radius: 8px; padding: 10px; background: #705cf1; color: #fff; font: 600 11px 'DM Sans'; cursor: pointer; }

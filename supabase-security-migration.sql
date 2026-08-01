@@ -3,6 +3,8 @@ alter table public.bio_pages add column if not exists font_family text not null 
 alter table public.bio_pages add column if not exists text_color text not null default '#ffffff';
 alter table public.bio_pages add column if not exists layout text not null default 'classic';
 alter table public.bio_pages add column if not exists background_image text not null default '';
+alter table public.bio_pages add column if not exists custom_domain text;
+create unique index if not exists bio_pages_custom_domain_idx on public.bio_pages(lower(custom_domain)) where custom_domain is not null;
 create unique index if not exists bio_pages_one_page_per_user on public.bio_pages(user_id) where user_id is not null;
 alter table public.bio_pages enable row level security;
 
@@ -22,6 +24,16 @@ create policy "Signed in users can create their own bio page"
 on public.bio_pages
 for insert
 with check (auth.uid() is not null and auth.uid() = user_id);
+
+drop policy if exists "Signed in users can delete their own bio page" on public.bio_pages;
+create policy "Signed in users can delete their own bio page"
+on public.bio_pages for delete
+using (auth.uid() is not null and auth.uid() = user_id);
+
+drop policy if exists "Users can delete their bio media" on storage.objects;
+create policy "Users can delete their bio media"
+on storage.objects for delete
+using (bucket_id = 'bio-media' and auth.uid()::text = (storage.foldername(name))[1]);
 
 create or replace function public.increment_bio_link_click(page_handle text, link_id text)
 returns void
