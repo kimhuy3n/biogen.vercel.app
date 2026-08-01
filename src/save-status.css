@@ -1,0 +1,4 @@
+.status.saving { color: #8b72df; }
+.status.saving span { background: #8b72df; }
+.status.error { color: #d65b6b; }
+.status.error span { background: #d65b6b; }

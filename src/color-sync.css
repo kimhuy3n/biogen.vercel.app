@@ -1,0 +1,68 @@
+.public-page .public-card,
+.public-page .public-card h1,
+.public-page .public-card > p,
+.public-page .public-card .socials,
+.public-page .public-brand,
+.phone .phone-content,
+.phone h3,
+.phone p,
+.phone .socials,
+.phone .powered {
+  color: var(--bio-text-color, #ffffff) !important;
+}
+
+.public-page .public-link strong,
+.phone .phone-link strong {
+  color: var(--bio-text-color, #3e3549) !important;
+}
+
+/* Product thumbnails should use the same footprint as regular link icons. */
+.phone-link:has(.product-visual),
+.public-link:has(.product-visual) {
+  min-height: 0 !important;
+}
+.phone-link:has(.product-visual) .phone-link-icon,
+.public-link:has(.product-visual) .phone-link-icon {
+  width: 28px !important;
+  height: 28px !important;
+  flex: 0 0 28px !important;
+}
+.phone-link:has(.product-visual) .phone-link-icon img,
+.public-link:has(.product-visual) .phone-link-icon img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+
+.block-row:has(.product-visual) .block-icon {
+  width: 34px !important;
+  height: 34px !important;
+}
+.block-row .product-visual img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+.product-visual {
+  overflow: hidden !important;
+  position: relative;
+}
+.product-visual img {
+  display: block;
+  transform-origin: center center;
+}
+
+.avatar,
+.phone-avatar,
+.public-avatar {
+  overflow: hidden;
+}
+.phone-avatar img,
+.public-avatar img,
+.avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center center;
+}
